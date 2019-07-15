@@ -17,7 +17,7 @@ This ARM Template deploys the following architecture to Azure.
 
 Refer to Template file AppGateway_vmss_v2.json
 
-<img src="./images/appgateway.PNG" alt="drawing" height="500px">
+<img src="../images/appgateway.PNG" alt="drawing" height="500px">
 
 > [!NOTE]
 > The Template does not cover adding the existing VMSS to a Back End pool of the App Gateway being deployed through this template. CLI or PowerShell or Azure Portal could be used for that
