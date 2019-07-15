@@ -1,2 +1,2 @@
 # armtemplates
-arm templates for different scenarios and deployments
+Azure ARM templates for different scenarios and deployments

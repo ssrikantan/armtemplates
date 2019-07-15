@@ -1,0 +1,326 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01-preview/deploymentTemplate.json",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "appGatewayName": {
+      "type": "string",
+      "metadata": {
+        "description": "String used as a base for naming resources. Must be 3-57 characters in length and globally unique across Azure. A hash is prepended to this string for some resources, and resource-specific information is appended."
+      },
+      "defaultValue": "appGwy1",
+      "maxLength": 57
+    },
+    "vmss1Name": {
+      "type": "string",
+      "metadata": {
+        "description": "String used as a base for naming resources. Must be 3-57 characters in length and globally unique across Azure. A hash is prepended to this string for some resources, and resource-specific information is appended."
+      },
+      "defaultValue": "webfarm1",
+      "maxLength": 57
+    },
+    "vmss2Name": {
+      "type": "string",
+      "metadata": {
+        "description": "String used as a base for naming resources. Must be 3-57 characters in length and globally unique across Azure. A hash is prepended to this string for some resources, and resource-specific information is appended."
+      },
+      "defaultValue": "webfarm2",
+      "maxLength": 57
+    },
+    "vmssSubnetName": {
+      "type": "string",
+      "defaultValue": "sf-subnet",
+      "metadata": {
+        "description": "Name of Existing Subnet where the VMSS are deployed into"
+      }
+    },
+    "vnetResourceGroup": {
+      "type": "string",
+      "defaultValue": "smartenrg",
+      "metadata": {
+        "description": "Resource Group of existing Vnet"
+      }
+    },
+    "vnetName": {
+      "type": "string",
+      "defaultValue": "smartenvnet",
+      "metadata": {
+        "description": "Name of Existing Vnet."
+      }
+    },
+    "subnetName": {
+      "type": "string",
+      "defaultValue": "dmz",
+      "metadata": {
+        "description": "Name of Existing Subnet"
+      }
+    }
+  },
+  "variables": {
+    "namingInfix": "[toLower(substring(concat(parameters('appGatewayName'), uniqueString(resourceGroup().id)), 0, 9))]",
+    "appGwPublicIPAddressName": "[concat(variables('namingInfix'), 'appGwPip')]",
+    "appGwName": "[concat(variables('namingInfix'), 'appGw')]",
+    "appGwPublicIPAddressID": "[resourceId('Microsoft.Network/publicIPAddresses',variables('appGwPublicIPAddressName'))]",
+    "appGwID": "[resourceId('Microsoft.Network/applicationGateways',variables('appGwName'))]",
+    "BEPool1": "appGwBepool1",
+    "BEPool2": "appGwBepool2",
+    "vnetID": "[resourceId(parameters('vnetResourceGroup'), 'Microsoft.Network/virtualNetworks',parameters('vnetName'))]",
+    "appGwSubnetID": "[concat(variables('vnetID'),'/subnets/',parameters('subnetName'))]",
+    "vmssSubnetID": "[resourceId(parameters('vnetResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnetName'))]"
+
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('appGwPublicIPAddressName')]",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-04-01",
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic"
+      }
+    },
+    {
+      "type": "Microsoft.Network/applicationGateways",
+      "name": "[variables('appGwName')]",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2019-04-01",
+      "dependsOn": [
+        "[concat('Microsoft.Network/publicIPAddresses/', variables('appGwPublicIPAddressName'))]"
+      ],
+      "properties": {
+        "sku": {
+          "name": "Standard_Small",
+          "tier": "Standard",
+          "capacity": "1"
+        },
+        "gatewayIPConfigurations": [
+          {
+            "name": "appGwIpConfig",
+            "properties": {
+              "subnet": {
+                "id": "[variables('appGwSubnetID')]"
+              }
+            }
+          }
+        ],
+        "frontendIPConfigurations": [
+          {
+            "name": "appGwPublicFrontendIp",
+            "properties": {
+              "PublicIPAddress": {
+                "id": "[variables('appGwPublicIPAddressID')]"
+              }
+            }
+          }
+        ],
+        "frontendPorts": [
+          {
+            "name": "FrontendPort_80",
+            "properties": {
+              "Port": "80"
+            }
+          },
+          {
+            "name": "FrontendPort_5000",
+            "properties": {
+              "Port": "5000"
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "[variables('BEPool1')]"
+          },
+          {
+            "name": "[variables('BEPool2')]"
+          }
+        ],
+        "backendHttpSettingsCollection": [
+          {
+            "name": "HttpSettingport80",
+            "properties": {
+              "port": 80,
+              "protocol": "Http",
+              "cookieBasedAffinity": "Disabled",
+              "requestTimeout": 20
+            },
+            "type": "Microsoft.Network/applicationGateways/backendHttpSettingsCollection"
+          },
+          {
+            "name": "HttpSettings5001",
+            "properties": {
+              "port": 5001,
+              "protocol": "Http",
+              "cookieBasedAffinity": "Disabled",
+              "path": "/",
+              "requestTimeout": 20,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/probes/Probe5001')]"
+              }
+            },
+            "type": "Microsoft.Network/applicationGateways/backendHttpSettingsCollection"
+          },
+          {
+            "name": "HttpSettings5002",
+            "properties": {
+              "port": 5002,
+              "protocol": "Http",
+              "cookieBasedAffinity": "Disabled",
+              "path": "/",
+              "requestTimeout": 20,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/probes/Probe5002')]"
+              }
+            },
+            "type": "Microsoft.Network/applicationGateways/backendHttpSettingsCollection"
+          }
+        ],
+        "httpListeners": [
+          {
+            "name": "HttpBasic80",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/frontendIPConfigurations/appGwPublicFrontendIp')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/frontendPorts/FrontendPort_80')]"
+              },
+              "protocol": "Http",
+              "requireServerNameIndication": false
+            },
+            "type": "Microsoft.Network/applicationGateways/httpListeners"
+          },
+          {
+            "name": "Http5000Listener",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/frontendIPConfigurations/appGwPublicFrontendIp')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/frontendPorts/FrontendPort_5000')]"
+              },
+              "protocol": "Http",
+              "requireServerNameIndication": false
+            },
+            "type": "Microsoft.Network/applicationGateways/httpListeners"
+          }
+        ],
+        "requestRoutingRules": [
+          {
+            "name": "PathBasedRule1",
+            "properties": {
+              "ruleType": "PathBasedRouting",
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/httpListeners/Http5000Listener')]"
+              },
+              "urlPathMap": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/urlPathMaps/PathBasedRule1')]"
+              }
+            },
+            "type": "Microsoft.Network/applicationGateways/requestRoutingRules"
+          },
+          {
+            "name": "RuleHttp80WebApps",
+            "properties": {
+              "ruleType": "Basic",
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/httpListeners/HttpBasic80')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/backendAddressPools/',variables('BEPool1'))]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/backendHttpSettingsCollection/HttpSettingport80')]"
+              }
+            },
+            "type": "Microsoft.Network/applicationGateways/requestRoutingRules"
+          }
+        ],
+        "probes": [
+          {
+            "name": "Probe5001",
+            "properties": {
+              "protocol": "Http",
+              "host": "127.0.0.1",
+              "path": "/webapp1.html",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            },
+            "type": "Microsoft.Network/applicationGateways/probes"
+          },
+          {
+            "name": "Probe5002",
+            "properties": {
+              "protocol": "Http",
+              "host": "127.0.0.1",
+              "path": "/webapp2.html",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            },
+            "type": "Microsoft.Network/applicationGateways/probes"
+          }
+        ],
+        "urlPathMaps": [
+          {
+            "name": "PathBasedRule1",
+            "properties": {
+              "defaultBackendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/backendAddressPools/',variables('BEPool1'))]"
+              },
+              "defaultBackendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/backendHttpSettingsCollection/HttpSettingport80')]"
+              },
+              "pathRules": [
+                {
+                  "name": "BEPool1Rule",
+                  "properties": {
+                    "paths": [
+                      "/images/*"
+                    ],
+                    "backendAddressPool": {
+                      "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/backendAddressPools/',variables('BEPool1'))]"
+                    },
+                    "backendHttpSettings": {
+                      "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/backendHttpSettingsCollection/HttpSettings5001')]"
+                    }
+                  },
+                  "type": "Microsoft.Network/applicationGateways/urlPathMaps/pathRules"
+                },
+                {
+                  "name": "BEPool2Rule",
+                  "properties": {
+                    "paths": [
+                      "/media/*"
+                    ],
+                    "backendAddressPool": {
+                      "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/backendAddressPools/',variables('BEPool2'))]"
+                    },
+                    "backendHttpSettings": {
+                      "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwName')), '/backendHttpSettingsCollection/HttpSettings5002')]"
+                    }
+                  },
+                  "type": "Microsoft.Network/applicationGateways/urlPathMaps/pathRules"
+                }
+              ]
+            },
+            "type": "Microsoft.Network/applicationGateways/urlPathMaps"
+          }
+        ]
+      }
+    }
+}
