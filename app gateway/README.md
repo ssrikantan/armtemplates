@@ -8,6 +8,7 @@ This ARM Template deploys the following architecture to Azure.
 - Deploy to an existing Subnet & VNet
 
 - Add Basic Listener, multiple Front End IP Configurations on different ports
+
 Note: Basic listener is used here where the Front End IP Configuration uses common Public IP and different ports, one per listener. Multi-Site Listener would be used when it is not ok to expose non-standard ports. The URL has to be accessed on a standard 80/443 port. Multiple domains can be defined in Multi-Site Listener configuration, all on standard ports 80/443. 
 
 - Add Basic Routing and URL based routing
